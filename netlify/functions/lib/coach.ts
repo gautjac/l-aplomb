@@ -52,7 +52,6 @@ export async function coach(req: CoachRequest): Promise<CoachReply> {
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 500,
-    temperature: 0.8,
     tools: [
       {
         name: "render_reflection",
