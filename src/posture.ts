@@ -16,12 +16,12 @@ import {
  * leaves the browser.
  */
 
-const WASM_URL =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm";
-const POSE_MODEL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
-const FACE_MODEL =
-  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+// Served from our own origin — staged into public/mediapipe at build time by
+// scripts/prepare-mediapipe.mjs. No runtime CDN: the engine version always
+// matches the installed package and the app keeps working offline.
+const WASM_URL = "/mediapipe/wasm";
+const POSE_MODEL = "/mediapipe/models/pose_landmarker_lite.task";
+const FACE_MODEL = "/mediapipe/models/face_landmarker.task";
 
 export type DetectorKind = "pose" | "face";
 
@@ -72,7 +72,20 @@ let fileset: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>> | null =
   null;
 
 async function getFileset() {
-  if (!fileset) fileset = await FilesetResolver.forVisionTasks(WASM_URL);
+  if (!fileset) {
+    try {
+      fileset = await FilesetResolver.forVisionTasks(WASM_URL);
+    } catch (e) {
+      // The WASM runtime failed to load. MediaPipe/Emscripten can reject with a
+      // non-Error (a string or number), which is how this used to surface as an
+      // opaque generic message — wrap it so callers always get something useful.
+      throw new Error(
+        `Le moteur de vision n'a pas pu se charger (${String(
+          e instanceof Error ? e.message : e,
+        )}).`,
+      );
+    }
+  }
   return fileset;
 }
 

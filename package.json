@@ -4,15 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prepare:mediapipe": "node scripts/prepare-mediapipe.mjs",
+    "predev": "npm run prepare:mediapipe",
     "dev": "netlify dev",
+    "predev:vite": "npm run prepare:mediapipe",
     "dev:vite": "vite",
+    "prebuild": "npm run prepare:mediapipe",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "prepreview": "npm run prepare:mediapipe",
     "preview": "vite preview"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
-    "@mediapipe/tasks-vision": "^0.10.22",
+    "@mediapipe/tasks-vision": "^0.10.35",
     "dexie": "^4.4.2",
     "dexie-react-hooks": "^4.4.0",
     "react": "^19.2.6",

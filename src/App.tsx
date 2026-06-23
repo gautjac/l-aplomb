@@ -7,6 +7,7 @@ import {
   computeStreak,
   todayKey,
   clearBaseline,
+  MIN_SESSION_MS,
   type DayRecord,
 } from "./db";
 import { playChime, notify, nudgeLine, primeAudio } from "./nudge";
@@ -81,7 +82,7 @@ export default function App() {
     [days, settings.uprightGoalPct],
   );
   const todayPct =
-    today && today.watchedMs > 30_000
+    today && today.watchedMs >= MIN_SESSION_MS
       ? Math.round((today.uprightMs / today.watchedMs) * 100)
       : null;
 
@@ -92,7 +93,7 @@ export default function App() {
     const trend = (days ?? [])
       .slice(-7)
       .map((d) =>
-        d.watchedMs > 30_000
+        d.watchedMs >= MIN_SESSION_MS
           ? Math.round((d.uprightMs / d.watchedMs) * 100)
           : null,
       )

@@ -44,6 +44,13 @@ class AplombDB extends Dexie {
 
 export const db = new AplombDB();
 
+/**
+ * A day needs at least this much actively-watched time to count as a real
+ * session — used for the daily %, the sparkline bars, and the streak so they all
+ * agree on what "a day with data" means.
+ */
+export const MIN_SESSION_MS = 60_000;
+
 export function todayKey(d = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -127,7 +134,7 @@ export function computeStreak(days: DayRecord[], goalPct = 70): number {
   for (let i = days.length - 1; i >= 0; i--) {
     const d = days[i];
     const watched = d.watchedMs;
-    if (watched < 60_000) {
+    if (watched < MIN_SESSION_MS) {
       // a day with no real session — if it's today, skip; otherwise the streak ends
       if (i === days.length - 1) continue;
       break;

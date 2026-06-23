@@ -1,4 +1,4 @@
-import type { DayRecord } from "../db";
+import { MIN_SESSION_MS, type DayRecord } from "../db";
 
 interface SparklineProps {
   days: DayRecord[];
@@ -10,7 +10,7 @@ const DAY_LETTERS = ["D", "L", "M", "M", "J", "V", "S"]; // Québec FR weekday i
 /** Daily uprightness sparkline — one bar per day, height = % upright. */
 export function Sparkline({ days, goalPct }: SparklineProps) {
   const pcts = days.map((d) =>
-    d.watchedMs > 30_000 ? (d.uprightMs / d.watchedMs) * 100 : null,
+    d.watchedMs >= MIN_SESSION_MS ? (d.uprightMs / d.watchedMs) * 100 : null,
   );
 
   return (

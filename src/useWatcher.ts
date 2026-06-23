@@ -40,6 +40,13 @@ const DRIFT_LINE = 0.55; // amber threshold
 const SMOOTH = 0.18; // EMA factor for deviation
 const COMMIT_EVERY_MS = 4000; // flush accounting to Dexie periodically
 const CALIBRATION_MS = 3500;
+// requestAnimationFrame is throttled (often to ~0 Hz) while the tab is hidden.
+// A frame interval beyond GAP_MS means the loop was paused, not merely slow — we
+// must not credit that span to accounting nor let it instantly trip a nudge.
+const GAP_MS = 1000;
+// Cap per-frame accrual so an ordinary hiccup (GC, heavy CPU frame) can't
+// over-credit time. Normal frames are well under this.
+const MAX_FRAME_MS = 500;
 
 interface WatcherOptions {
   sensitivity: number;
@@ -70,6 +77,7 @@ export function useWatcher(opts: WatcherOptions): Watcher {
   const slouchSinceRef = useRef<number | null>(null);
   const nudgedRef = useRef<boolean>(false);
   const devEmaRef = useRef<number>(0);
+  const fpsEmaRef = useRef<number>(0);
   const uprightStreakRef = useRef<number>(0);
   const acc = useRef({ upright: 0, slouch: 0, watched: 0, nudges: 0 });
   const lastCommitRef = useRef<number>(0);
@@ -127,9 +135,23 @@ export function useWatcher(opts: WatcherOptions): Watcher {
     }
 
     const now = performance.now();
-    const dt = lastTsRef.current ? now - lastTsRef.current : 16;
+    const rawDt = lastTsRef.current ? now - lastTsRef.current : 0;
     lastTsRef.current = now;
-    const fps = dt > 0 ? Math.round(1000 / dt) : 0;
+    // A zero (first frame) or oversized gap means the loop was paused/throttled.
+    // Don't accrue that span, and reset the slouch timer so refocusing after a
+    // hidden tab can't fire an instant "you've been slouching for ages" nudge.
+    const gap = rawDt === 0 || rawDt > GAP_MS;
+    const dt = gap ? 0 : Math.min(rawDt, MAX_FRAME_MS);
+    if (gap) slouchSinceRef.current = null;
+    // Smooth the fps readout so it (and the React re-render it gates) doesn't
+    // churn every frame on ±1 jitter.
+    if (!gap) {
+      const inst = 1000 / rawDt;
+      fpsEmaRef.current = fpsEmaRef.current
+        ? fpsEmaRef.current + 0.1 * (inst - fpsEmaRef.current)
+        : inst;
+    }
+    const fps = fpsEmaRef.current ? Math.round(fpsEmaRef.current / 5) * 5 : 0;
 
     const metrics = det.detect(video, now);
     const faceSeen = !!metrics;
@@ -308,9 +330,14 @@ export function useWatcher(opts: WatcherOptions): Watcher {
           ? "Accès à la caméra refusé. Autorise la caméra pour que L'Aplomb puisse veiller."
           : e instanceof DOMException && e.name === "NotFoundError"
             ? "Aucune caméra détectée sur cette machine."
-            : e instanceof Error
-              ? e.message
-              : "Une erreur est survenue au démarrage.";
+            : e instanceof DOMException && e.name === "NotReadableError"
+              ? "La caméra est déjà utilisée par une autre application."
+              : e instanceof Error && e.message
+                ? e.message
+                : // Never swallow an unknown failure behind a vague line — show it.
+                  `Démarrage impossible : ${String(e)}`;
+      // Surface the raw cause in the console too, for diagnosis.
+      console.error("[L'Aplomb] start() failed:", e);
       setStatus((s) => ({ ...s, phase: "error", error: msg }));
     }
   }, [loop, status.phase]);
@@ -327,6 +354,8 @@ export function useWatcher(opts: WatcherOptions): Watcher {
     }
     if (videoRef.current) videoRef.current.srcObject = null;
     devEmaRef.current = 0;
+    fpsEmaRef.current = 0;
+    lastTsRef.current = 0;
     slouchSinceRef.current = null;
     nudgedRef.current = false;
     uprightStreakRef.current = 0;
@@ -365,6 +394,9 @@ export function useWatcher(opts: WatcherOptions): Watcher {
   useEffect(() => {
     const onVis = () => {
       if (document.hidden) flush(true);
+      // On refocus, force the next frame to be treated as a fresh start so the
+      // throttled-away gap is never accrued (belt-and-suspenders with GAP_MS).
+      else lastTsRef.current = 0;
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
